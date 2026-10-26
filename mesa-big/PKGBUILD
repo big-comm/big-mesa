@@ -1,0 +1,408 @@
+# Maintainer: Tales A. Mendonça <talesam@gmail.com>
+#
+# mesa-big: Mesa straight from mesa3d.org, the latest stable release, for
+# whoever opts in (games, new GPUs). The ISO and everyone else keep Manjaro's
+# mesa; installing this replaces it, installing mesa again brings it back.
+#
+#   - Drivers for PC GPUs and virtual machines: radeonsi, iris, crocus, zink,
+#     virgl and llvmpipe (OpenGL; llvmpipe is the software fallback, softpipe
+#     is left out: it only runs where LLVM is missing, and here it never is);
+#     RADV, ANV, hasvk, NVK and venus (Vulkan).
+#     No lavapipe.
+#   - Built with GCC, as Arch and Manjaro build Mesa: against clang it
+#     compiled shader-db 3-4% faster (CPU cycles, 4263 shaders, radeonsi).
+#   - No LTO: Mesa rejects it, and so does this package (!lto below).
+#   - LLVM built here, static, and linked into the package: mesa-big does
+#     not depend on llvm-libs, so it keeps working when Manjaro moves LLVM
+#     (stable and testing differ). radeonsi and RADV compile with ACO
+#     (amd-use-llvm=false; ACO is radeonsi's default since Mesa 26.0), so only
+#     llvmpipe uses LLVM. The AMDGPU target is still built: meson.build asks
+#     for it whenever radeonsi or RADV is built, whatever amd-use-llvm says
+#     (as of Mesa 26.2.5 and main on 2026-10-25). Being static, none of it
+#     ends up in the package: the linker only takes what Mesa calls.
+#   - Virtual machines: amdgpu and Intel native contexts (the native drivers
+#     inside a guest), plus virgl and venus for hosts without them.
+#   - mesa-clc and the Intel precompiled-shader compiler (ray tracing) are
+#     build tools only: they are built first against the system LLVM and
+#     clang, and the drivers are then built with them.
+
+pkgname=mesa-big
+pkgver=26.2.5
+pkgrel=1
+_llvmver=23.1.4
+_shaderdb=6ec450899fb1cb9d6d4829bbf864288c4e7a5dbb
+pkgdesc="Mesa from mesa3d.org, latest stable release, with LLVM built in (BigCommunity)"
+url="https://www.mesa3d.org/"
+arch=('x86_64')
+license=('MIT AND BSD-3-Clause AND SGI-B-2.0' 'Apache-2.0 WITH LLVM-exception')
+depends=(
+  expat glibc libdisplay-info libdrm libelf libgcc libglvnd libpng libstdc++
+  libx11 libxcb libxext libxshmfence libxxf86vm lm_sensors python spirv-tools
+  systemd-libs vulkan-icd-loader wayland xcb-util-keysyms zlib zstd
+)
+makedepends=(
+  # Mesa
+  cbindgen cmake directx-headers elfutils glslang libclc libva libxml2
+  libxrandr meson ninja python-mako python-packaging python-ply
+  python-pycparser python-yaml rust rust-bindgen wayland-protocols xorgproto
+  # mesa-clc and the precompiled-shader compiler, built with the system LLVM
+  clang llvm spirv-llvm-translator
+  # check(): vulkaninfo, and shader-db's runner
+  git libepoxy vulkan-tools
+)
+_mesaver=1:$pkgver-$pkgrel
+provides=(
+  "mesa=$_mesaver" "mesa-libgl=$_mesaver" "libva-mesa-driver=$_mesaver"
+  "vulkan-intel=$_mesaver" "vulkan-radeon=$_mesaver" "vulkan-nouveau=$_mesaver"
+  "vulkan-virtio=$_mesaver"
+  "vulkan-mesa-layers=$_mesaver" "vulkan-mesa-implicit-layers=$_mesaver"
+  libva-driver opengl-driver vulkan-driver
+)
+conflicts=(
+  mesa mesa-libgl libva-mesa-driver vulkan-intel vulkan-radeon vulkan-nouveau
+  vulkan-virtio
+  vulkan-mesa-layers vulkan-mesa-implicit-layers
+)
+options=(
+  # Mesa rejects LTO ("random issues that are nearly impossible to debug"),
+  # and makepkg.conf turns it on by default.
+  !lto
+)
+source=(
+  "https://archive.mesa3d.org/mesa-$pkgver.tar.xz"
+  "https://github.com/llvm/llvm-project/releases/download/llvmorg-$_llvmver/llvm-project-$_llvmver.src.tar.xz"
+  # Real shaders from games and apps, compiled by check() on simulated GPUs.
+  "git+https://gitlab.freedesktop.org/mesa/shader-db.git#commit=$_shaderdb"
+)
+# The Mesa and LLVM tarballs are pinned by checksum. Their release managers'
+# keys are in keys/pgp/: check the .sig with them before updating a checksum
+# (see the README). The CI does not import keys, so the build itself does not
+# download the signatures.
+
+# Rust crates for NVK, used as Meson subprojects
+# shellcheck disable=SC2190
+declare -A _crates=(
+  bitflags         2.9.1
+  cfg-if           1.0.0
+  equivalent       1.0.1
+  errno            0.3.12
+  hashbrown        0.14.1
+  indexmap         2.2.6
+  libc             0.2.185
+  log              0.4.27
+  once_cell        1.8.0
+  paste            1.0.14
+  pest             2.8.0
+  pest_derive      2.8.0
+  pest_generator   2.8.0
+  pest_meta        2.8.0
+  proc-macro2      1.0.86
+  quote            1.0.35
+  remain           0.2.12
+  roxmltree        0.20.0
+  rustc-hash       2.1.1
+  rustix           1.1.4
+  syn              2.0.87
+  thiserror        2.0.11
+  thiserror-impl   2.0.11
+  ucd-trie         0.1.6
+  unicode-ident    1.0.12
+  windows-link     0.2.0
+  windows-sys      0.61.1
+  xml              1.2.1
+  zerocopy         0.8.13
+  zerocopy-derive  0.8.13
+)
+
+# Used to generate the above table
+_gencrates() {
+  grep '^source_url' subprojects/*-rs.wrap | \
+    sed -r 's|.*crates/([^/]+)/([0-9.]+)/download|\1 \2|' | \
+    column -t -S 2 | sed 's/^/  /'
+}
+
+for _crate in "${!_crates[@]}"; do
+  _ver="${_crates[$_crate]}"
+  source+=(
+    "$_crate-$_ver.tar.gz::https://static.crates.io/crates/$_crate/$_ver/download"
+  )
+done
+
+sha256sums=('794b3d1729075dae7ebd47c7283b7ca0cdb5dec668f7f11cc0a5d82f6138a0a5'
+            '819ecf7351f1a66f76b2d701d8942faaf5faeb324cb90c9d5b090de142434bb2'
+            '81a1b28dee87d96f676bd57286297e0552fa4670fdf4723136853316ed5c516b'
+            'b8aa498d22c9bbaf482329839bc5620c46be275a19a812e9a22a2b07529a642a'
+            '67914ab451f3bfd2e69e5e9d2ef3858484e7074d63f204fd166ec391b54de21d'
+            'ed646292ffc8188ef8ea4d1e0e0150fb15a5c2e12ad9b8fc191ae7a8a7f3c4b9'
+            '7f9f832470494906d1fca5329f8ab5791cc60beb230c74815dff541cbd2b5ca0'
+            '52ff2c0fe9bc6cb6b14a0592c2ff4fa9ceb83eea9db979b0487cd054946a2b8f'
+            '168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26'
+            '7dfda62a12f55daeae5015f81b0baea145391cb4520f86c248fc615d72640d12'
+            '13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94'
+            '7988d73a4303ca289df03316bc490e934accf371af6bc745393cf3c2c5c4f25d'
+            '45e46c0661abb7180e7b9c281db115305d49ca1709ab8242adf09666d2173c65'
+            '357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d'
+            'baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd'
+            '1ad5e011230cad274d0532460c5ab69828ea47ae75681b42a841663efffaf794'
+            '5e719e8df665df0d1c8fbfd238015744736151d4445ec0836b8e628aae103b77'
+            'd725d9cfd79e87dccc9341a2ef39d1b6f6353d68c4b33c177febbe1a402c97c5'
+            '26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2'
+            '3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b'
+            '1b8e56985ec62d17e9c1001dc89c88ecd7dc08e47eba5ec7c29c7b5eeecde967'
+            '6f109e41dd4a3c848907eb83d5a42ea98b3769495597450cf6d153507b166f0f'
+            '291ec9ab5efd934aaf503a6466c5d5251535d108ee747472c3977cc5acc868ef'
+            '6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97'
+            'de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c'
+            'cea14ef9355e3beab063703aa9dab15afd25f0667c341310c1e5274bb1d0da18'
+            'b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190'
+            '198db74531d58c70a361c42201efde7e2591e976d518caf7662a47dc5720e7b6'
+            'd452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc'
+            '5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5'
+            'db7d01726be8ab66ab32f9df467ae8b1148906685bbe75c82d1e65d7f5b3f841'
+            '692fcb63b64b1758029e0a96ee63e049ce8c5948587f2f7208df04625e5f6b56'
+            '25aa4ce346d03a6dcd68dd8b4010bcb74e54e62c90c573f394c46eae99aba32d')
+
+prepare() {
+  cd mesa-$pkgver
+  # Shown by glxinfo / vulkaninfo, and makes browsers drop their GPU caches.
+  echo "$pkgver-big$pkgrel" >VERSION
+}
+
+# Parallel jobs: all CPUs by default (the CI). MESA_BIG_JOBS=4 keeps a local
+# build from taking a desktop's memory: each LLVM compile job needs ~1.5 GB.
+_jobs=${MESA_BIG_JOBS:-$(nproc)}
+
+_build_llvm() {
+  # X86 for llvmpipe; AMDGPU only for meson's check (see the header). No zstd: LLVM then
+  # exports it as -lzstd.so.<version>, which breaks static linking
+  # (bbs.archlinux.org/viewtopic.php?id=305005); zlib links fine.
+  cmake -S llvm-project-$_llvmver.src/llvm -B build-llvm -G Ninja \
+    -D CMAKE_BUILD_TYPE=Release \
+    -D CMAKE_INSTALL_PREFIX="$srcdir/llvm-static" \
+    -D LLVM_TARGETS_TO_BUILD="X86;AMDGPU" \
+    -D LLVM_HOST_TRIPLE=x86_64-pc-linux-gnu \
+    -D BUILD_SHARED_LIBS=OFF \
+    -D LLVM_BUILD_LLVM_DYLIB=OFF \
+    -D LLVM_LINK_LLVM_DYLIB=OFF \
+    -D LLVM_ENABLE_PIC=ON \
+    -D LLVM_ENABLE_RTTI=ON \
+    -D LLVM_ENABLE_ASSERTIONS=OFF \
+    -D LLVM_BUILD_TOOLS=OFF \
+    -D LLVM_INCLUDE_TESTS=OFF \
+    -D LLVM_INCLUDE_EXAMPLES=OFF \
+    -D LLVM_INCLUDE_BENCHMARKS=OFF \
+    -D LLVM_INCLUDE_DOCS=OFF \
+    -D LLVM_ENABLE_BINDINGS=OFF \
+    -D LLVM_ENABLE_ZLIB=FORCE_ON \
+    -D LLVM_ENABLE_ZSTD=OFF \
+    -D LLVM_ENABLE_LIBXML2=OFF \
+    -D LLVM_ENABLE_LIBEDIT=OFF \
+    -D LLVM_ENABLE_LIBPFM=OFF \
+    -D LLVM_ENABLE_FFI=OFF \
+    -D LLVM_PARALLEL_LINK_JOBS=1
+  cmake --build build-llvm -j "$_jobs" --target install-llvm-headers install-llvm-libraries \
+    install-cmake-exports llvm-config
+  # llvm-config is how Mesa finds LLVM. With LLVM_BUILD_TOOLS=OFF it has no
+  # install target; it works out the prefix from where it is run from.
+  install -Dm755 build-llvm/bin/llvm-config -t "$srcdir/llvm-static/bin"
+}
+
+_build_tools() {
+  # mesa-clc and the precompiled-shader compiler run only during the build,
+  # so they use the system LLVM and clang; the drivers then use them.
+  # --auto-features auto: arch-meson enables every auto feature, and with no
+  # platform and no drivers some of them (xlib-lease) cannot exist.
+  arch-meson mesa-$pkgver build-tools \
+    --auto-features auto \
+    -D gallium-drivers= \
+    -D vulkan-drivers=intel \
+    -D intel-rt=enabled \
+    -D llvm=enabled \
+    -D shared-llvm=enabled \
+    -D mesa-clc=enabled \
+    -D install-mesa-clc=true \
+    -D precomp-compiler=enabled \
+    -D install-precomp-compiler=true \
+    -D platforms= \
+    -D glx=disabled -D egl=disabled -D gbm=disabled -D gles1=disabled -D gles2=disabled \
+    -D opengl=false -D valgrind=disabled -D libunwind=disabled
+  meson compile -C build-tools -j "$_jobs"
+  meson install -C build-tools --destdir "$srcdir/tools"
+}
+
+build() {
+  export MESON_PACKAGE_CACHE_DIR="$srcdir"
+  _build_llvm
+  _build_tools
+
+  printf '[binaries]\nllvm-config = %s\n' "'$srcdir/llvm-static/bin/llvm-config'" > native-llvm.ini
+  local meson_options=(
+    --native-file native-llvm.ini
+    --optimization 2
+    -D b_ndebug=true
+    -D android-libbacktrace=disabled
+    -D gallium-drivers=radeonsi,iris,crocus,zink,virgl,llvmpipe
+    -D gallium-extra-hud=true
+    -D gallium-mediafoundation=disabled
+    -D gallium-rusticl=false
+    -D gles1=disabled
+    -D html-docs=disabled
+    -D intel-rt=enabled
+    -D libunwind=disabled
+    -D llvm=enabled
+    -D shared-llvm=disabled
+    -D amd-use-llvm=false
+    -D amdgpu-virtio=true
+    -D intel-virtio-experimental=true
+    -D mesa-clc=system
+    -D precomp-compiler=system
+    -D microsoft-clc=disabled
+    -D valgrind=disabled
+    -D video-codecs=all
+    -D vulkan-drivers=amd,intel,intel_hasvk,nouveau,virtio
+    -D vulkan-layers=device-select,overlay,anti-lag,screenshot,vram-report-limit
+    -D vulkan-loader-rpath=
+    -D vulkan-manifest-per-architecture=false
+    # Simulated GPUs (drm-shim) for check(); package() leaves them out.
+    -D tools=drm-shim,intel
+  )
+  PATH="$srcdir/tools/usr/bin:$PATH" arch-meson mesa-$pkgver build "${meson_options[@]}"
+  PATH="$srcdir/tools/usr/bin:$PATH" meson compile -C build -j "$_jobs"
+}
+
+# What -D tools=drm-shim,intel installs, which only check() uses: the
+# simulated GPUs and Intel's debugging tools (Mesa does not install them
+# without that option, and neither does Arch's mesa).
+_remove_test_tools() {
+  rm -fv "$pkgdir"/usr/lib/lib*_noop_drm_shim.so \
+    "$pkgdir"/usr/lib/lib{intel_dump_gpu,intel_sanitize_gpu}.so
+  rm -fv "$pkgdir"/usr/bin/{aubinator,aubinator_error_decode,elk_asm,elk_disasm,gentool} \
+    "$pkgdir"/usr/bin/{intel_dev_info,intel_dump_gpu,intel_error2aub,intel_error2hangdump} \
+    "$pkgdir"/usr/bin/{intel_hang_replay,intel_measure.py,intel_monitor,intel_sanitize_gpu} \
+    "$pkgdir"/usr/bin/{intel_stub_gpu,mda}
+
+  # A tool a newer Mesa adds must not slip into the package unnoticed.
+  local extra
+  extra=$(find "$pkgdir/usr/bin" -type f \
+    ! -name mesa-overlay-control.py ! -name mesa-screenshot-control.py)
+  if [[ -n $extra ]]; then
+    error "unexpected files in /usr/bin:"; printf '  %s\n' $extra; return 1
+  fi
+}
+
+# The GPU code shader-db produced, summed over every shader. Deterministic,
+# unlike timings: a release that compiles the same shaders into bigger or
+# slower code, or spills more, shows up here exactly.
+_shaderdb_summary() { # gpu file
+  case $1 in
+    amd) awk '/Shader Stats:/ { n++
+           for (i = 2; i <= NF; i++) {
+             if ($(i-1) == "Code" && $i == "Size:") size += $(i+1)
+             if ($i == "VGPRS:") vgprs += $(i+1)
+             if ($(i-1) == "Spilled" && $i == "VGPRs:") spilled += $(i+1)
+           } }
+         END { printf "amd shaders=%d code_size=%d vgprs=%d spilled_vgprs=%d\n", n, size, vgprs, spilled }' "$2" ;;
+    intel) awk '/ shader: [0-9]+ inst,/ { n++
+           for (i = 2; i <= NF; i++) {
+             if ($i == "inst,") inst += $(i-1)
+             if ($i == "cycles,") cycles += $(i-1)
+             if ($i == "spills:fills,") { split($(i-1), sf, ":"); spills += sf[1]; fills += sf[2] }
+           } }
+         END { printf "intel shaders=%d inst=%d cycles=%d spills=%d fills=%d\n", n, inst, cycles, spills, fills }' "$2" ;;
+  esac
+}
+
+# Warns, without failing the build, when a metric got more than 2% worse
+# than shaderdb-baseline.txt, the previous release's summary. Every metric
+# here is lower-is-better, except the shader count, which must not drop.
+_shaderdb_compare() { # summary-file
+  local baseline=$startdir/shaderdb-baseline.txt
+  [[ -f $baseline ]] || { warning "no shaderdb-baseline.txt to compare with"; return 0; }
+  awk -v warnings="$srcdir/shaderdb-warnings.txt" '
+    function load(line, into,   f, i, kv) {
+      split(line, f, " ")
+      for (i = 2; i in f; i++) { split(f[i], kv, "="); into[f[1] " " kv[1]] = kv[2] }
+    }
+    FNR == NR { load($0, base); next }
+    { load($0, now) }
+    END {
+      for (k in now) {
+        if (!(k in base)) continue
+        split(k, gm, " ")
+        if (gm[2] == "shaders") bad = now[k] < base[k]
+        else bad = now[k] > base[k] * 1.02 || (gm[2] ~ /spill|fill/ && now[k] > base[k])
+        if (bad) printf "%s %s: %s -> %s\n", gm[1], gm[2], base[k], now[k] > warnings
+      }
+    }' "$baseline" "$1"
+  if [[ -s $srcdir/shaderdb-warnings.txt ]]; then
+    warning "shader-db: worse code than the baseline (previous release):"
+    sed 's/^/    /' "$srcdir/shaderdb-warnings.txt"
+  else
+    msg2 "shader-db: no regression against the baseline"
+  fi
+}
+
+check() {
+  # 1. The point of the static LLVM: nothing in the package may need llvm-libs.
+  local lib missing=0
+  while IFS= read -r lib; do
+    if ldd "$lib" 2>/dev/null | grep -q 'libLLVM'; then
+      echo "links libLLVM: $lib"; missing=1
+    fi
+  done < <(find build -name '*.so*' -type f)
+  (( missing == 0 )) || return 1
+
+  # 2. The drivers built here, on simulated GPUs (Mesa's drm-shim): they must
+  #    load, report this version, and compile real shaders without crashing.
+  #    The shader-db results are kept in $srcdir for comparing releases.
+  local root=$srcdir/check-root version="Mesa $pkgver-big$pkgrel"
+  rm -rf "$root"
+  meson install -C build --destdir "$root" --quiet
+  lib=$root/usr/lib
+  local env=(
+    LD_LIBRARY_PATH="$lib" LIBGL_DRIVERS_PATH="$lib/dri" GBM_BACKENDS_PATH="$lib/gbm"
+    __EGL_VENDOR_LIBRARY_FILENAMES="$root/usr/share/glvnd/egl_vendor.d/50_mesa.json"
+    MESA_SHADER_CACHE_DISABLE=true
+  )
+  local -A shim=([amd]=libamdgpu_noop_drm_shim.so [intel]=libintel_noop_drm_shim.so)
+  local -A icd=([amd]=radeon_icd.json [intel]=intel_icd.json)
+  local gpu out compiled
+
+  for gpu in amd intel; do
+    out=$srcdir/check-vulkan-$gpu.txt
+    env "${env[@]}" LD_PRELOAD="$lib/${shim[$gpu]}" \
+      VK_DRIVER_FILES="$root/usr/share/vulkan/icd.d/${icd[$gpu]}" \
+      vulkaninfo --summary > "$out" 2>&1
+    if ! grep -q "driverInfo *= $version" "$out"; then
+      echo "Vulkan on a simulated $gpu GPU did not report $version:"; tail -20 "$out"; return 1
+    fi
+  done
+
+  # Through the environment: shader-db's Makefile appends -fopenmp to CFLAGS,
+  # which a command-line CFLAGS would override.
+  CFLAGS="-O2 -I$root/usr/include" LDFLAGS="-L$lib" make -C shader-db run
+  : > "$srcdir/shaderdb-summary.metrics"
+  for gpu in amd intel; do
+    out=$srcdir/check-shaderdb-$gpu.txt
+    if ! (cd shader-db && env "${env[@]}" LD_PRELOAD="$lib/${shim[$gpu]}" \
+          ./run -j "$_jobs" shaders > "$out" 2>&1); then
+      echo "shader-db failed on a simulated $gpu GPU:"; tail -20 "$out"; return 1
+    fi
+    compiled=$(awk '/took .* seconds and compiled/ { n += $8 } END { print n + 0 }' "$out")
+    echo "shader-db, simulated $gpu GPU: $compiled shaders compiled"
+    if (( compiled < 8000 )); then
+      echo "too few shaders compiled on a simulated $gpu GPU"; tail -20 "$out"; return 1
+    fi
+    _shaderdb_summary "$gpu" "$out" | tee -a "$srcdir/shaderdb-summary.metrics"
+  done
+  _shaderdb_compare "$srcdir/shaderdb-summary.metrics"
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+  # The simulated GPUs and the Intel tools were only for check().
+  _remove_test_tools
+  install -Dm644 mesa-$pkgver/docs/license.rst -t "$pkgdir/usr/share/licenses/$pkgname"
+  install -Dm644 llvm-project-$_llvmver.src/llvm/LICENSE.TXT \
+    "$pkgdir/usr/share/licenses/$pkgname/LLVM-LICENSE.TXT"
+}
