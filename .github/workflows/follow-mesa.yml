@@ -58,11 +58,14 @@ jobs:
         id: follow
         run: |
           python3 .github/scripts/watch_mesa.py follow --cache mesa-cache --result "$RUNNER_TEMP/follow.json"
-          # Keep only the tarballs the PKGBUILDs now name.
-          ver=$(jq -r '.versions["mesa-big"] | sub("-[0-9]+$"; "")' "$RUNNER_TEMP/follow.json")
-          llvm=$(jq -r '.llvm // .from_llvm' "$RUNNER_TEMP/follow.json")
-          find mesa-cache -maxdepth 1 \( -name 'mesa-*' ! -name "mesa-$ver.tar.xz*" \) -delete
-          find mesa-cache -maxdepth 1 \( -name 'llvm-project-*' ! -name "llvm-project-$llvm.src.tar.xz*" \) -delete
+          # Keep only the tarballs the PKGBUILDs now name. Nothing is
+          # downloaded when there is nothing new, and then there is no cache.
+          if [[ -d mesa-cache ]]; then
+            ver=$(jq -r '.versions["mesa-big"] | sub("-[0-9]+$"; "")' "$RUNNER_TEMP/follow.json")
+            llvm=$(jq -r '.llvm // .from_llvm' "$RUNNER_TEMP/follow.json")
+            find mesa-cache -mindepth 1 -maxdepth 1 -type f \( -name 'mesa-*' ! -name "mesa-$ver.tar.xz*" \) -delete
+            find mesa-cache -mindepth 1 -maxdepth 1 -type f \( -name 'llvm-project-*' ! -name "llvm-project-$llvm.src.tar.xz*" \) -delete
+          fi
           {
             echo "status=$(jq -r .status "$RUNNER_TEMP/follow.json")"
             echo "llvm_major=$(jq -r '.llvm_major // ""' "$RUNNER_TEMP/follow.json")"
