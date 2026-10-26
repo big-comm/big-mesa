@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/assets/banner.png" alt="mesa-big — the BigCommunity Mesa" width="100%">
+</p>
+
 # mesa-big — the BigCommunity Mesa
 
 **mesa-big** is an optional build of [Mesa](https://www.mesa3d.org), the open
@@ -124,9 +128,9 @@ published:
    `libLLVM`.
 2. **The drivers load.** RADV and ANV run on simulated GPUs (Mesa's
    `drm-shim`, no hardware needed) and must report this exact version.
-3. **They compile real shaders.** shader-db compiles about 8,500 shaders for
-   AMD and 13,500 for Intel on the simulated GPUs; a crash, or fewer than 8,000
-   shaders, fails the build.
+3. **They compile real shaders.** shader-db compiles its 8,539 shaders on each
+   simulated GPU (13,504 programs on Intel, which compiles some shaders in more
+   than one variant); a crash, or fewer than 8,000 shaders, fails the build.
 4. **Performance control.** The code generated for those shaders (size,
    registers, instructions, cycles, spills) is compared with
    [`shaderdb-baseline.txt`](mesa-big/shaderdb-baseline.txt), the numbers of
@@ -143,31 +147,52 @@ up in the package.
 
 ## Updating to a new release
 
-For now, by hand, in `mesa-big/PKGBUILD` and `lib32-mesa-big/PKGBUILD`, which
-must stay on the same Mesa and LLVM:
+Nobody updates it by hand. Two workflows keep it in step, as the
+[big-kernel](https://github.com/big-comm/big-kernel) watchers do:
 
-1. Set `pkgver` (Mesa) and, when there is a new one, `_llvmver` (LLVM).
-   `pkgrel` back to 1.
-2. Download the tarballs and their signatures, and check them with the release
-   managers' keys kept in [`mesa-big/keys/pgp`](mesa-big/keys/pgp):
+- **[Follow Mesa and LLVM](.github/workflows/follow-mesa.yml)**, every six
+  hours, in the image the packages are built in. When archive.mesa3d.org has a
+  newer stable Mesa (the `.0` of a new series included) or GitHub a newer LLVM
+  release of the same major, it moves **both** PKGBUILDs together: downloads
+  the tarballs and checks their signatures against the release managers' keys
+  in [`mesa-big/keys/pgp`](mesa-big/keys/pgp), and nothing else; regenerates
+  the NVK crate list from the new Mesa and the checksums; sets `pkgrel` back
+  to 1 and commits. The CI does not import keys, so the PKGBUILDs pin the
+  tarballs by checksum: this is where the signatures are checked.
+- **[Build what testing lacks](.github/workflows/build-mesa.yml)**, every half
+  hour: sends each package to be built for testing while its PKGBUILD is ahead
+  of community-testing. A build that does not get published is sent again
+  after half an hour, up to three attempts in all; the third failure fails the
+  workflow, so GitHub mails it.
 
-   ```bash
-   gpg --import mesa-big/keys/pgp/*.asc
-   gpg --verify mesa-26.2.6.tar.xz.sig mesa-26.2.6.tar.xz
-   ```
-
-   The CI does not import keys, so the PKGBUILD pins the tarballs by checksum
-   instead of downloading the signatures: this is where they are checked.
-3. Update the NVK crate list if Mesa changed it (`_gencrates` in
-   `mesa-big/PKGBUILD` prints it; both PKGBUILDs carry it) and the checksums
-   (`updpkgsums` in each directory).
-4. Build. After the release is published, copy the new
-   `src/shaderdb-summary.metrics` over `shaderdb-baseline.txt`, so the next
-   release is compared with this one.
+The build in testing is the gate: a release that does not build, or fails
+`check()`, is never published.
 
 `mesa-big` links `libSPIRV-Tools.so` (and `lib32-mesa-big` its 32-bit twin),
-whose file name carries no version: when Manjaro moves `spirv-tools` to a new
-release, rebuild both (`pkgrel + 1`).
+whose file name carries no version. Each PKGBUILD records, in `_spirvtools`,
+the version from Manjaro stable it was built against; when Manjaro moves it,
+the watcher rebuilds that package (`pkgrel + 1`).
+
+**What is left to a person:**
+
+- **A new LLVM major** (24, 25, ...): the watcher opens an issue instead,
+  since a Mesa release may not support it yet. Set `_llvmver` in both
+  PKGBUILDs and run `updpkgsums` in each directory.
+- **A failed update** (a download, a signature, the checksums) also opens an
+  issue. A bad signature means a tarball not signed by a known release
+  manager: find out why before adding any key to `keys/pgp`.
+- **Moving a release from testing to stable.**
+- **The shader-db baseline:** once a release is published, copy its
+  `src/shaderdb-summary.metrics` over `shaderdb-baseline.txt`, so the next
+  release is compared with it.
+
+To update by hand, change the same values and check the signatures the same
+way:
+
+```bash
+gpg --import mesa-big/keys/pgp/*.asc
+gpg --verify mesa-26.2.6.tar.xz.sig mesa-26.2.6.tar.xz
+```
 
 ## Building it yourself
 
@@ -201,6 +226,9 @@ the directory it is asked for (`pkgbuild_dir: mesa-big` or
 
 ```
 big-mesa/
+├── .github/
+│   ├── workflows/               # follow Mesa and LLVM; build what testing lacks
+│   └── scripts/                 # the watcher and its tests
 ├── mesa-big/
 │   ├── PKGBUILD                 # Mesa, LLVM, the build and its tests
 │   ├── shaderdb-baseline.txt    # shader-db numbers of the last release
@@ -222,7 +250,7 @@ big-mesa/
 - [ ] A `-debug` package, for useful backtraces when a driver crashes
 - [ ] gamescope frame limiter patch
 - [ ] Faster builds, only if measured: `-O3`, `x86-64-v3`, profile-guided optimisation
-- [ ] New Mesa and LLVM releases picked up, checked and built for testing automatically
+- [x] New Mesa and LLVM releases picked up, checked and built for testing automatically
 - [ ] Published benchmarks against Manjaro's mesa on the same hardware
 
 Claims about speed will be made here with numbers, once the benchmarks exist.

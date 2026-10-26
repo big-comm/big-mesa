@@ -1,0 +1,67 @@
+name: 🔎 Build what testing lacks
+
+# Sends mesa-big and lib32-mesa-big to be built for testing whenever their
+# PKGBUILD is ahead of what community-testing has: a new release committed by
+# the Mesa watcher, or a change made by hand. A build that does not get
+# published is sent again after half an hour, up to three attempts in all.
+# See .github/scripts/watch_mesa.py.
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  push:
+    branches: [main]
+    paths:
+      - "mesa-big/PKGBUILD"
+      - "lib32-mesa-big/PKGBUILD"
+      - ".github/scripts/**"
+      - ".github/workflows/build-mesa.yml"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only report what would be built"
+        type: boolean
+        default: false
+      force:
+        description: "Dispatch again builds that were already dispatched, or given up after three attempts"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # One watcher at a time, so two runs never dispatch the same build.
+    concurrency:
+      group: build-mesa
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test the watcher
+        run: python3 -m unittest discover -s .github/scripts -v
+
+      - name: Restore dispatch state
+        uses: actions/cache/restore@v4
+        with:
+          path: watch-state.json
+          key: watch-state-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: watch-state-
+
+      - name: Dispatch the packages that are behind
+        env:
+          # A token allowed to dispatch to big-comm/build-package.
+          DISPATCH_TOKEN: ${{ secrets.DISPATCH_TOKEN || secrets.ORGANIZATION_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+          FORCE: ${{ inputs.force && '--force' || '' }}
+        run: python3 .github/scripts/watch_mesa.py dispatch --state watch-state.json $DRY_RUN $FORCE
+
+      - name: Save dispatch state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: watch-state.json
+          key: watch-state-${{ github.run_id }}-${{ github.run_attempt }}
