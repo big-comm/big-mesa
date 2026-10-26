@@ -1,0 +1,328 @@
+# Maintainer: Tales A. Mendonça <talesam@gmail.com>
+#
+# lib32-mesa-big: the 32-bit half of mesa-big, for 32-bit games (Steam, Wine).
+# Same Mesa release, same drivers and the same choices as ../mesa-big (read
+# its header), built for i686:
+#
+#   - LLVM built here for i686, static, linked in: no lib32-llvm-libs.
+#   - mesa-clc and the Intel precompiled-shader compiler are build tools:
+#     they are built for the build machine (x86_64, system LLVM) and the
+#     32-bit drivers are built with them.
+#   - No Intel ray tracing in 32-bit, as in Arch's lib32-mesa.
+#   - check() runs what a 32-bit game does first: OpenGL through EGL on
+#     llvmpipe (the static LLVM at work), and Vulkan on simulated AMD and
+#     Intel GPUs (drm-shim).
+#
+# Keep pkgver and _llvmver equal to ../mesa-big's.
+
+pkgname=lib32-mesa-big
+pkgver=26.2.5
+pkgrel=1
+_llvmver=23.1.4
+pkgdesc="Mesa from mesa3d.org, latest stable release, with LLVM built in (BigCommunity) - 32-bit"
+url="https://www.mesa3d.org/"
+arch=('x86_64')
+license=('MIT AND BSD-3-Clause AND SGI-B-2.0' 'Apache-2.0 WITH LLVM-exception')
+depends=(
+  lib32-expat lib32-gcc-libs lib32-glibc lib32-libdisplay-info lib32-libdrm
+  lib32-libelf lib32-libglvnd lib32-libpng lib32-libx11 lib32-libxcb
+  lib32-libxext lib32-libxshmfence lib32-libxxf86vm lib32-lm_sensors
+  lib32-spirv-tools lib32-systemd lib32-vulkan-icd-loader lib32-wayland
+  lib32-xcb-util-keysyms lib32-zlib lib32-zstd
+  # The 64-bit half: Vulkan manifests, EGL vendor file, drirc. mesa-big
+  # provides it; not mesa-big itself, so the CI can install it to build.
+  mesa
+)
+makedepends=(
+  # Mesa, 32-bit
+  lib32-libva lib32-libxrandr lib32-rust-libs
+  # Mesa, build machine
+  cbindgen cmake glslang libclc meson ninja python-mako python-packaging
+  python-ply python-pycparser python-yaml rust rust-bindgen wayland-protocols
+  xorgproto
+  # mesa-clc and the precompiled-shader compiler, built with the system LLVM
+  clang llvm spirv-llvm-translator
+  # check()
+  libglvnd vulkan-headers
+)
+_mesaver=1:$pkgver-$pkgrel
+provides=(
+  "lib32-mesa=$_mesaver" "lib32-mesa-libgl=$_mesaver" "lib32-libva-mesa-driver=$_mesaver"
+  "lib32-vulkan-intel=$_mesaver" "lib32-vulkan-radeon=$_mesaver"
+  "lib32-vulkan-nouveau=$_mesaver" "lib32-vulkan-virtio=$_mesaver"
+  "lib32-vulkan-mesa-layers=$_mesaver" "lib32-vulkan-mesa-implicit-layers=$_mesaver"
+  lib32-libva-driver lib32-opengl-driver lib32-vulkan-driver
+)
+conflicts=(
+  lib32-mesa lib32-mesa-libgl lib32-libva-mesa-driver lib32-vulkan-intel
+  lib32-vulkan-radeon lib32-vulkan-nouveau lib32-vulkan-virtio
+  lib32-vulkan-mesa-layers lib32-vulkan-mesa-implicit-layers
+)
+options=(
+  # Mesa rejects LTO, and makepkg.conf turns it on by default.
+  !lto
+)
+source=(
+  "https://archive.mesa3d.org/mesa-$pkgver.tar.xz"
+  "https://github.com/llvm/llvm-project/releases/download/llvmorg-$_llvmver/llvm-project-$_llvmver.src.tar.xz"
+  test-lib32.c
+)
+# Pinned by checksum; the release managers' keys are in ../mesa-big/keys/pgp
+# (see the README).
+
+# Rust crates for NVK, used as Meson subprojects (the same as ../mesa-big)
+# shellcheck disable=SC2190
+declare -A _crates=(
+  bitflags         2.9.1
+  cfg-if           1.0.0
+  equivalent       1.0.1
+  errno            0.3.12
+  hashbrown        0.14.1
+  indexmap         2.2.6
+  libc             0.2.185
+  log              0.4.27
+  once_cell        1.8.0
+  paste            1.0.14
+  pest             2.8.0
+  pest_derive      2.8.0
+  pest_generator   2.8.0
+  pest_meta        2.8.0
+  proc-macro2      1.0.86
+  quote            1.0.35
+  remain           0.2.12
+  roxmltree        0.20.0
+  rustc-hash       2.1.1
+  rustix           1.1.4
+  syn              2.0.87
+  thiserror        2.0.11
+  thiserror-impl   2.0.11
+  ucd-trie         0.1.6
+  unicode-ident    1.0.12
+  windows-link     0.2.0
+  windows-sys      0.61.1
+  xml              1.2.1
+  zerocopy         0.8.13
+  zerocopy-derive  0.8.13
+)
+
+for _crate in "${!_crates[@]}"; do
+  _ver="${_crates[$_crate]}"
+  source+=(
+    "$_crate-$_ver.tar.gz::https://static.crates.io/crates/$_crate/$_ver/download"
+  )
+done
+
+sha256sums=('794b3d1729075dae7ebd47c7283b7ca0cdb5dec668f7f11cc0a5d82f6138a0a5'
+            '819ecf7351f1a66f76b2d701d8942faaf5faeb324cb90c9d5b090de142434bb2'
+            'd12e0911801fa1836b5f917e74f331f35705d17e091e9333e770535233017d2c'
+            'b8aa498d22c9bbaf482329839bc5620c46be275a19a812e9a22a2b07529a642a'
+            '67914ab451f3bfd2e69e5e9d2ef3858484e7074d63f204fd166ec391b54de21d'
+            'ed646292ffc8188ef8ea4d1e0e0150fb15a5c2e12ad9b8fc191ae7a8a7f3c4b9'
+            '7f9f832470494906d1fca5329f8ab5791cc60beb230c74815dff541cbd2b5ca0'
+            '52ff2c0fe9bc6cb6b14a0592c2ff4fa9ceb83eea9db979b0487cd054946a2b8f'
+            '168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26'
+            '7dfda62a12f55daeae5015f81b0baea145391cb4520f86c248fc615d72640d12'
+            '13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94'
+            '7988d73a4303ca289df03316bc490e934accf371af6bc745393cf3c2c5c4f25d'
+            '45e46c0661abb7180e7b9c281db115305d49ca1709ab8242adf09666d2173c65'
+            '357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d'
+            'baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd'
+            '1ad5e011230cad274d0532460c5ab69828ea47ae75681b42a841663efffaf794'
+            '5e719e8df665df0d1c8fbfd238015744736151d4445ec0836b8e628aae103b77'
+            'd725d9cfd79e87dccc9341a2ef39d1b6f6353d68c4b33c177febbe1a402c97c5'
+            '26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2'
+            '3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b'
+            '1b8e56985ec62d17e9c1001dc89c88ecd7dc08e47eba5ec7c29c7b5eeecde967'
+            '6f109e41dd4a3c848907eb83d5a42ea98b3769495597450cf6d153507b166f0f'
+            '291ec9ab5efd934aaf503a6466c5d5251535d108ee747472c3977cc5acc868ef'
+            '6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97'
+            'de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c'
+            'cea14ef9355e3beab063703aa9dab15afd25f0667c341310c1e5274bb1d0da18'
+            'b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190'
+            '198db74531d58c70a361c42201efde7e2591e976d518caf7662a47dc5720e7b6'
+            'd452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc'
+            '5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5'
+            'db7d01726be8ab66ab32f9df467ae8b1148906685bbe75c82d1e65d7f5b3f841'
+            '692fcb63b64b1758029e0a96ee63e049ce8c5948587f2f7208df04625e5f6b56'
+            '25aa4ce346d03a6dcd68dd8b4010bcb74e54e62c90c573f394c46eae99aba32d')
+
+prepare() {
+  cd mesa-$pkgver
+  echo "$pkgver-big$pkgrel" >VERSION
+}
+
+# Parallel jobs: all CPUs by default (the CI). MESA_BIG_JOBS=4 keeps a local
+# build from taking a desktop's memory: each LLVM compile job needs ~1.5 GB.
+_jobs=${MESA_BIG_JOBS:-$(nproc)}
+
+_build_llvm() {
+  # As in ../mesa-big, for i686. lib32-zlib, found by hand: CMake would take
+  # the 64-bit one.
+  CC="gcc -m32" CXX="g++ -m32" \
+  cmake -S llvm-project-$_llvmver.src/llvm -B build-llvm -G Ninja \
+    -D CMAKE_BUILD_TYPE=Release \
+    -D CMAKE_INSTALL_PREFIX="$srcdir/llvm-static" \
+    -D LLVM_TARGETS_TO_BUILD="X86;AMDGPU" \
+    -D LLVM_HOST_TRIPLE=i686-pc-linux-gnu \
+    -D LLVM_LIBDIR_SUFFIX= \
+    -D BUILD_SHARED_LIBS=OFF \
+    -D LLVM_BUILD_LLVM_DYLIB=OFF \
+    -D LLVM_LINK_LLVM_DYLIB=OFF \
+    -D LLVM_ENABLE_PIC=ON \
+    -D LLVM_ENABLE_RTTI=ON \
+    -D LLVM_ENABLE_ASSERTIONS=OFF \
+    -D LLVM_BUILD_TOOLS=OFF \
+    -D LLVM_INCLUDE_TESTS=OFF \
+    -D LLVM_INCLUDE_EXAMPLES=OFF \
+    -D LLVM_INCLUDE_BENCHMARKS=OFF \
+    -D LLVM_INCLUDE_DOCS=OFF \
+    -D LLVM_ENABLE_BINDINGS=OFF \
+    -D LLVM_ENABLE_ZLIB=FORCE_ON \
+    -D ZLIB_LIBRARY=/usr/lib32/libz.so \
+    -D ZLIB_INCLUDE_DIR=/usr/include \
+    -D LLVM_ENABLE_ZSTD=OFF \
+    -D LLVM_ENABLE_LIBXML2=OFF \
+    -D LLVM_ENABLE_LIBEDIT=OFF \
+    -D LLVM_ENABLE_LIBPFM=OFF \
+    -D LLVM_ENABLE_FFI=OFF \
+    -D LLVM_PARALLEL_LINK_JOBS=1
+  cmake --build build-llvm -j "$_jobs" --target install-llvm-headers install-llvm-libraries \
+    install-cmake-exports llvm-config
+  # A 32-bit program; it runs on the build machine with lib32-glibc.
+  install -Dm755 build-llvm/bin/llvm-config -t "$srcdir/llvm-static/bin"
+}
+
+_build_tools() {
+  # The same build tools as ../mesa-big, for the build machine.
+  arch-meson mesa-$pkgver build-tools \
+    --auto-features auto \
+    -D gallium-drivers= \
+    -D vulkan-drivers=intel \
+    -D intel-rt=enabled \
+    -D llvm=enabled \
+    -D shared-llvm=enabled \
+    -D mesa-clc=enabled \
+    -D install-mesa-clc=true \
+    -D precomp-compiler=enabled \
+    -D install-precomp-compiler=true \
+    -D platforms= \
+    -D glx=disabled -D egl=disabled -D gbm=disabled -D gles1=disabled -D gles2=disabled \
+    -D opengl=false -D valgrind=disabled -D libunwind=disabled
+  meson compile -C build-tools -j "$_jobs"
+  meson install -C build-tools --destdir "$srcdir/tools"
+}
+
+build() {
+  export MESON_PACKAGE_CACHE_DIR="$srcdir"
+  _build_llvm
+  _build_tools
+
+  # Meson merges cross files: lib32 (from meson) for i686, this one for the
+  # LLVM built above.
+  printf '[binaries]\nllvm-config = %s\n' "'$srcdir/llvm-static/bin/llvm-config'" > cross-llvm.ini
+  local meson_options=(
+    --cross-file lib32
+    --cross-file cross-llvm.ini
+    --optimization 2
+    -D b_ndebug=true
+    -D android-libbacktrace=disabled
+    -D gallium-drivers=radeonsi,iris,crocus,zink,virgl,llvmpipe
+    -D gallium-extra-hud=true
+    -D gallium-mediafoundation=disabled
+    -D gallium-rusticl=false
+    -D gles1=disabled
+    -D html-docs=disabled
+    -D intel-rt=disabled
+    -D libunwind=disabled
+    -D llvm=enabled
+    -D shared-llvm=disabled
+    -D amd-use-llvm=false
+    -D amdgpu-virtio=true
+    -D intel-virtio-experimental=true
+    -D mesa-clc=system
+    -D precomp-compiler=system
+    -D microsoft-clc=disabled
+    -D valgrind=disabled
+    -D video-codecs=all
+    -D vulkan-drivers=amd,intel,intel_hasvk,nouveau,virtio
+    -D vulkan-layers=device-select,overlay,anti-lag,screenshot,vram-report-limit
+    -D vulkan-loader-rpath=
+    -D vulkan-manifest-per-architecture=false
+    # Simulated GPUs (drm-shim) for check(); package() leaves them out.
+    # Intel's simulated GPU is built with the Intel tools.
+    -D tools=drm-shim,intel
+  )
+  PATH="$srcdir/tools/usr/bin:$PATH" arch-meson mesa-$pkgver build "${meson_options[@]}"
+  PATH="$srcdir/tools/usr/bin:$PATH" meson compile -C build -j "$_jobs"
+}
+
+check() {
+  # 1. Nothing in the package may need lib32-llvm-libs.
+  local lib missing=0
+  while IFS= read -r lib; do
+    if ldd "$lib" 2>/dev/null | grep -q 'libLLVM'; then
+      echo "links libLLVM: $lib"; missing=1
+    fi
+  done < <(find build -name '*.so*' -type f)
+  (( missing == 0 )) || return 1
+
+  # 2. What a 32-bit game does first, against the drivers built here.
+  local root=$srcdir/check-root version="Mesa $pkgver-big$pkgrel" out
+  rm -rf "$root"
+  meson install -C build --destdir "$root" --quiet
+  lib=$root/usr/lib32
+  gcc -m32 -O2 -o test-lib32 test-lib32.c -lEGL -lGL -lvulkan
+  if [[ $(file -b test-lib32) != ELF\ 32-bit* ]]; then
+    echo "test-lib32 is not a 32-bit program"; return 1
+  fi
+  local env=(
+    LD_LIBRARY_PATH="$lib"
+    __EGL_VENDOR_LIBRARY_FILENAMES="$root/usr/share/glvnd/egl_vendor.d/50_mesa.json"
+    LIBGL_DRIVERS_PATH="$lib/dri"
+    MESA_SHADER_CACHE_DISABLE=true
+  )
+
+  # OpenGL on llvmpipe: the static i686 LLVM compiling and running shaders.
+  out=$(env "${env[@]}" LIBGL_ALWAYS_SOFTWARE=1 ./test-lib32 gl 2>&1)
+  echo "$out"
+  if ! grep -q "GL_RENDERER: llvmpipe (LLVM $_llvmver" <<<"$out" ||
+     ! grep -q "GL_VERSION: .*$version" <<<"$out"; then
+    echo "32-bit OpenGL on llvmpipe did not report $version with LLVM $_llvmver"; return 1
+  fi
+
+  # Vulkan on simulated GPUs.
+  local -A shim=([amd]=libamdgpu_noop_drm_shim.so [intel]=libintel_noop_drm_shim.so)
+  local -A icd=([amd]=radeon_icd.json [intel]=intel_icd.json)
+  local gpu
+  for gpu in amd intel; do
+    out=$(env "${env[@]}" LD_PRELOAD="$lib/${shim[$gpu]}" \
+      VK_DRIVER_FILES="$root/usr/share/vulkan/icd.d/${icd[$gpu]}" \
+      ./test-lib32 vulkan 2>&1)
+    echo "$out"
+    if ! grep -q "driverInfo: $version" <<<"$out"; then
+      echo "32-bit Vulkan on a simulated $gpu GPU did not report $version"; return 1
+    fi
+  done
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+  # The simulated GPUs and the Intel tools were only for check(); the Intel
+  # tools' libraries go to /usr/lib whatever the libdir.
+  rm -fv "$pkgdir"/usr/lib32/lib*_noop_drm_shim.so \
+    "$pkgdir"/usr/lib/lib{intel_dump_gpu,intel_sanitize_gpu}.so
+  rmdir "$pkgdir"/usr/lib
+  # Everything outside lib32 comes with the 64-bit half.
+  rm -rf "$pkgdir"/{etc,usr/bin,usr/include,usr/share}
+  # Indirect GLX (remote X clients) through libglvnd, as Arch's lib32-mesa does.
+  ln -sr "$pkgdir"/usr/lib32/libGLX_{mesa,indirect}.so.0
+
+  local extra
+  extra=$(find "$pkgdir" -mindepth 1 -maxdepth 2 ! -path "$pkgdir/usr" ! -path "$pkgdir/usr/lib32")
+  if [[ -n $extra ]]; then
+    error "unexpected files outside /usr/lib32:"; printf '  %s\n' $extra; return 1
+  fi
+  install -Dm644 mesa-$pkgver/docs/license.rst -t "$pkgdir/usr/share/licenses/$pkgname"
+  install -Dm644 llvm-project-$_llvmver.src/llvm/LICENSE.TXT \
+    "$pkgdir/usr/share/licenses/$pkgname/LLVM-LICENSE.TXT"
+}

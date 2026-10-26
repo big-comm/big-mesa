@@ -1,0 +1,4 @@
+# shader-db summary of the last published mesa-big, which check() compares against.
+# mesa-big 26.2.5-1 (LLVM 23.1.4, shader-db 6ec4508), simulated GPUs.
+amd shaders=8539 code_size=6492864 vgprs=161556 spilled_vgprs=0
+intel shaders=13504 inst=1592902 cycles=90952989 spills=78 fills=261
