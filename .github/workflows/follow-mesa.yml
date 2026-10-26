@@ -1,0 +1,139 @@
+name: 🧊 Follow Mesa and LLVM
+
+# Moves mesa-big and lib32-mesa-big, together, to each new stable Mesa
+# release (the .0 of a new series included) and each new LLVM release of the
+# same major: checks the tarballs' signatures with mesa-big/keys/pgp,
+# regenerates the NVK crate list and the checksums, then commits. A new
+# spirv-tools in Manjaro stable rebuilds instead (pkgrel + 1). It builds
+# nothing itself: the build watcher sees the PKGBUILDs ahead of testing and
+# sends them to be built, where check() is the gate.
+#
+# A new LLVM major, or a run that fails, opens an issue: those are for a
+# person. So is moving testing to stable. See .github/scripts/watch_mesa.py.
+
+on:
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Update the PKGBUILDs, but commit nothing"
+        type: boolean
+        default: false
+
+concurrency:
+  group: follow-mesa
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  follow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # The image the packages are built in: makepkg -g and gpg as the build has them.
+    container:
+      image: talesam/community-build:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare the container
+        run: |
+          sudo chown -R builduser:builduser "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Test the watcher
+        run: python3 -m unittest discover -s .github/scripts -v
+
+      - name: Restore downloads
+        uses: actions/cache@v4
+        with:
+          path: mesa-cache
+          key: mesa-cache-${{ hashFiles('mesa-big/PKGBUILD') }}
+          restore-keys: mesa-cache-
+
+      - name: Update to the newest releases
+        id: follow
+        run: |
+          python3 .github/scripts/watch_mesa.py follow --cache mesa-cache --result "$RUNNER_TEMP/follow.json"
+          # Keep only the tarballs the PKGBUILDs now name.
+          ver=$(jq -r '.versions["mesa-big"] | sub("-[0-9]+$"; "")' "$RUNNER_TEMP/follow.json")
+          llvm=$(jq -r '.llvm // .from_llvm' "$RUNNER_TEMP/follow.json")
+          find mesa-cache -maxdepth 1 \( -name 'mesa-*' ! -name "mesa-$ver.tar.xz*" \) -delete
+          find mesa-cache -maxdepth 1 \( -name 'llvm-project-*' ! -name "llvm-project-$llvm.src.tar.xz*" \) -delete
+          {
+            echo "status=$(jq -r .status "$RUNNER_TEMP/follow.json")"
+            echo "llvm_major=$(jq -r '.llvm_major // ""' "$RUNNER_TEMP/follow.json")"
+          } >> "$GITHUB_OUTPUT"
+
+      # Commits happen only from the default branch, the one the build
+      # service checks out; a run on another branch only reports.
+      - name: Commit the update
+        if: (steps.follow.outputs.status == 'bumped' || steps.follow.outputs.status == 'rebuilt') && !inputs.dry_run && github.ref_name == github.event.repository.default_branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898898+github-actions[bot]@users.noreply.github.com"
+          git add mesa-big/PKGBUILD lib32-mesa-big/PKGBUILD
+          jq -r '
+            if .status == "bumped" then
+              "⬆️ mesa-big: Mesa \(.from_mesa) → \(.mesa // .from_mesa), LLVM \(.from_llvm) → \(.llvm // .from_llvm)\n\n" +
+              "Updated by the Mesa watcher: both tarballs carry a good signature\n" +
+              "from mesa-big/keys/pgp; crate list and checksums regenerated.\n" +
+              "Both packages: \(.versions["mesa-big"]) / \(.versions["lib32-mesa-big"])."
+            else
+              "🔁 Rebuild for spirv-tools: \(.rebuild | join(", "))\n\n" +
+              "Manjaro stable moved spirv-tools, whose library has no versioned\n" +
+              "soname: \(.spirv | to_entries | map("\(.key) \(.value)") | join(", "))."
+            end' "$RUNNER_TEMP/follow.json" > "$RUNNER_TEMP/message"
+          git commit -F "$RUNNER_TEMP/message"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Report what needs a person
+        if: failure() || steps.follow.outputs.llvm_major != ''
+        uses: actions/github-script@v7
+        env:
+          LLVM_MAJOR: ${{ steps.follow.outputs.llvm_major }}
+          FAILED: ${{ steps.follow.outcome == 'failure' && 'yes' || '' }}
+        with:
+          script: |
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            let title, body;
+            if (process.env.FAILED) {
+              title = 'mesa-big: the watcher could not update to a new release';
+              body = [
+                'The Mesa watcher failed while updating the PKGBUILDs (a download,',
+                'a signature, the crate list or the checksums); nothing was committed.',
+                'A bad signature means a tarball not signed by a key in mesa-big/keys/pgp:',
+                'check where it came from before adding any key.',
+                '',
+                `Run: ${run}`,
+              ].join('\n');
+            } else if (process.env.LLVM_MAJOR) {
+              title = `mesa-big: LLVM ${process.env.LLVM_MAJOR} is out`;
+              body = [
+                `LLVM ${process.env.LLVM_MAJOR} is a new major release; the watcher only follows the current major.`,
+                '',
+                'Check that the Mesa release supports it, then set `_llvmver` in both',
+                'PKGBUILDs (mesa-big and lib32-mesa-big) and update the checksums.',
+                '',
+                `Run: ${run}`,
+              ].join('\n');
+            } else {
+              return;
+            }
+            // One issue per problem: later runs do not open it again.
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open',
+            });
+            if (open.some(issue => issue.title === title)) {
+              core.info(`already reported: ${title}`);
+              return;
+            }
+            if (${{ inputs.dry_run || false }}) {
+              core.info(`dry run, would open: ${title}\n${body}`);
+              return;
+            }
+            await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title, body });
+            core.info(`opened: ${title}`);

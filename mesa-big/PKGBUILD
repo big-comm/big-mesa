@@ -30,6 +30,9 @@ pkgname=mesa-big
 pkgver=26.2.5
 pkgrel=1
 _llvmver=23.1.4
+# spirv-tools from Manjaro stable this was built against: its library has no
+# versioned soname, so the watcher rebuilds (pkgrel + 1) when it changes.
+_spirvtools=1:1.4.357.0-1
 _shaderdb=6ec450899fb1cb9d6d4829bbf864288c4e7a5dbb
 pkgdesc="Mesa from mesa3d.org, latest stable release, with LLVM built in (BigCommunity)"
 url="https://www.mesa3d.org/"

@@ -4,3 +4,4 @@ mesa-big/pkg/
 mesa-big/*.tar.*
 mesa-big/*.pkg.tar.*
 mesa-big/*.sig
+__pycache__/
