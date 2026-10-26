@@ -402,6 +402,8 @@ package() {
   meson install -C build --destdir "$pkgdir"
   # The simulated GPUs and the Intel tools were only for check().
   _remove_test_tools
+  # Indirect GLX (remote X clients) through libglvnd, as Arch's mesa does.
+  ln -sr "$pkgdir"/usr/lib/libGLX_{mesa,indirect}.so.0
   install -Dm644 mesa-$pkgver/docs/license.rst -t "$pkgdir/usr/share/licenses/$pkgname"
   install -Dm644 llvm-project-$_llvmver.src/llvm/LICENSE.TXT \
     "$pkgdir/usr/share/licenses/$pkgname/LLVM-LICENSE.TXT"
