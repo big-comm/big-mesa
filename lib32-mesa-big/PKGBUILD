@@ -16,12 +16,12 @@
 # Keep pkgver and _llvmver equal to ../mesa-big's.
 
 pkgname=lib32-mesa-big
-pkgver=26.2.5
+pkgver=26.2.6
 pkgrel=1
 _llvmver=23.1.4
 # lib32-spirv-tools from Manjaro stable this was built against: its library has no
 # versioned soname, so the watcher rebuilds (pkgrel + 1) when it changes.
-_spirvtools=1:1.4.357.0-1
+_spirvtools=1:1.4.363.0-1
 pkgdesc="Mesa from mesa3d.org, latest stable release, with LLVM built in (BigCommunity) - 32-bit"
 url="https://www.mesa3d.org/"
 arch=('x86_64')
@@ -115,7 +115,7 @@ for _crate in "${!_crates[@]}"; do
   )
 done
 
-sha256sums=('794b3d1729075dae7ebd47c7283b7ca0cdb5dec668f7f11cc0a5d82f6138a0a5'
+sha256sums=('b9436b3e1a8be76fbd4823dc884f90596ab7c6ac5e1867a305e66ffccfb31a92'
             '819ecf7351f1a66f76b2d701d8942faaf5faeb324cb90c9d5b090de142434bb2'
             'd12e0911801fa1836b5f917e74f331f35705d17e091e9333e770535233017d2c'
             'b8aa498d22c9bbaf482329839bc5620c46be275a19a812e9a22a2b07529a642a'

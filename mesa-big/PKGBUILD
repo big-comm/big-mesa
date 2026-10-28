@@ -27,12 +27,12 @@
 #     clang, and the drivers are then built with them.
 
 pkgname=mesa-big
-pkgver=26.2.5
+pkgver=26.2.6
 pkgrel=1
 _llvmver=23.1.4
 # spirv-tools from Manjaro stable this was built against: its library has no
 # versioned soname, so the watcher rebuilds (pkgrel + 1) when it changes.
-_spirvtools=1:1.4.357.0-1
+_spirvtools=1:1.4.363.0-1
 _shaderdb=6ec450899fb1cb9d6d4829bbf864288c4e7a5dbb
 pkgdesc="Mesa from mesa3d.org, latest stable release, with LLVM built in (BigCommunity)"
 url="https://www.mesa3d.org/"
@@ -131,7 +131,7 @@ for _crate in "${!_crates[@]}"; do
   )
 done
 
-sha256sums=('794b3d1729075dae7ebd47c7283b7ca0cdb5dec668f7f11cc0a5d82f6138a0a5'
+sha256sums=('b9436b3e1a8be76fbd4823dc884f90596ab7c6ac5e1867a305e66ffccfb31a92'
             '819ecf7351f1a66f76b2d701d8942faaf5faeb324cb90c9d5b090de142434bb2'
             '81a1b28dee87d96f676bd57286297e0552fa4670fdf4723136853316ed5c516b'
             'b8aa498d22c9bbaf482329839bc5620c46be275a19a812e9a22a2b07529a642a'
