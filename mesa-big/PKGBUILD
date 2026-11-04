@@ -29,7 +29,7 @@
 pkgname=mesa-big
 pkgver=26.2.6
 pkgrel=1
-_llvmver=23.1.4
+_llvmver=23.1.5
 # spirv-tools from Manjaro stable this was built against: its library has no
 # versioned soname, so the watcher rebuilds (pkgrel + 1) when it changes.
 _spirvtools=1:1.4.363.0-1
@@ -132,7 +132,7 @@ for _crate in "${!_crates[@]}"; do
 done
 
 sha256sums=('b9436b3e1a8be76fbd4823dc884f90596ab7c6ac5e1867a305e66ffccfb31a92'
-            '819ecf7351f1a66f76b2d701d8942faaf5faeb324cb90c9d5b090de142434bb2'
+            'fb50b1eac93ddeb3aa8dab4cfe324dff74f4a9c2bdee6160c9e36188f8d06a6e'
             '81a1b28dee87d96f676bd57286297e0552fa4670fdf4723136853316ed5c516b'
             'b8aa498d22c9bbaf482329839bc5620c46be275a19a812e9a22a2b07529a642a'
             '67914ab451f3bfd2e69e5e9d2ef3858484e7074d63f204fd166ec391b54de21d'
