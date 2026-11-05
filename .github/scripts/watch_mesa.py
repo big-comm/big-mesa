@@ -227,7 +227,12 @@ def apply_follow(texts, plan, spirv, crates=None):
                 text = set_value(text, "pkgver", plan["mesa"])
             if plan["llvm"]:
                 text = set_value(text, "_llvmver", plan["llvm"])
-            text = set_value(text, "pkgrel", "1")
+            # A new LLVM alone keeps pkgver: without a higher pkgrel the build
+            # would carry the version already published, and be skipped.
+            if plan["mesa"]:
+                text = set_value(text, "pkgrel", "1")
+            else:
+                text = set_value(text, "pkgrel", str(int(value(text, "pkgrel", directory)) + 1))
             if crates:
                 text = replace_array(text, "declare -A _crates", render_crates(crates))
         elif directory in plan["rebuild"]:
