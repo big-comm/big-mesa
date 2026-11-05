@@ -95,6 +95,20 @@ class TestApply(unittest.TestCase):
                 self.assertIn("declare -A _crates=(\n  bitflags         9.9.9\n  syn              3.0.0\n)", text)
                 self.assertEqual(self.bash_check(text), "ok")
 
+    def test_a_new_llvm_alone_raises_pkgrel(self):
+        # Mesa 26.2.6 with LLVM 23.1.5 went out as 26.2.6-1 again, the version
+        # already published, and was never built.
+        before = texts()
+        plan = watch_mesa.plan_follow(before, [current("pkgver")], ["23.9.9"], spirv_now())
+        self.assertIsNone(plan["mesa"])
+        updated = watch_mesa.apply_follow(before, plan, spirv_now())
+        for directory, text in updated.items():
+            with self.subTest(directory=directory):
+                rel = int(watch_mesa.value(before[directory], "pkgrel"))
+                self.assertEqual(watch_mesa.value(text, "pkgver"), watch_mesa.value(before[directory], "pkgver"))
+                self.assertEqual(watch_mesa.value(text, "_llvmver"), "23.9.9")
+                self.assertEqual(watch_mesa.value(text, "pkgrel"), str(rel + 1))
+
     def test_rebuild_raises_pkgrel_and_records_spirv_tools(self):
         spirv = spirv_now()
         spirv["mesa-big"] = "1:9.9.9-1"

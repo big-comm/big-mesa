@@ -28,7 +28,7 @@
 
 pkgname=mesa-big
 pkgver=26.2.6
-pkgrel=1
+pkgrel=2
 _llvmver=23.1.5
 # spirv-tools from Manjaro stable this was built against: its library has no
 # versioned soname, so the watcher rebuilds (pkgrel + 1) when it changes.
