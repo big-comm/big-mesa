@@ -250,7 +250,7 @@ build() {
     -D valgrind=disabled
     -D video-codecs=all
     -D vulkan-drivers=amd,intel,intel_hasvk,nouveau,virtio
-    -D vulkan-layers=device-select,overlay,anti-lag,screenshot,vram-report-limit
+    -D vulkan-layers=device-select,overlay,screenshot,vram-report-limit
     -D vulkan-loader-rpath=
     -D vulkan-manifest-per-architecture=false
     # Simulated GPUs (drm-shim) for check(); package() leaves them out.
