@@ -162,6 +162,35 @@ def crates_from_tarball(path):
     return crates
 
 
+VENUS_URL = "https://gitlab.freedesktop.org/virgl/venus-protocol.git"
+
+
+def venus_from_tarball(path):
+    """The venus-protocol version a Mesa release builds venus against.
+
+    From subprojects/venus-protocol.wrap (Mesa 26.3 on). The PKGBUILDs fetch
+    that tag as a git source and put it where the wrap would have cloned it,
+    so a release that moves it elsewhere, or under another name, stops the
+    bump instead of building against the wrong protocol.
+    """
+    with tarfile.open(path, mode="r:*") as archive:
+        for member in archive:
+            if not re.fullmatch(r"[^/]+/subprojects/venus-protocol\.wrap", member.name):
+                continue
+            wrap = dict(
+                (key.strip(), val.strip())
+                for key, sep, val in (line.partition("=") for line in
+                                      archive.extractfile(member).read().decode().splitlines())
+                if sep
+            )
+            match = re.fullmatch(r"v([0-9]+(?:\.[0-9]+)+)", wrap.get("revision", ""))
+            if not match or wrap.get("url") != VENUS_URL \
+                    or wrap.get("directory") != f"venus-protocol-{match.group(1)}":
+                raise PkgbuildError(f"{path}: subprojects/venus-protocol.wrap is not what the PKGBUILDs expect: {wrap}")
+            return match.group(1)
+    raise PkgbuildError(f"{path}: no subprojects/venus-protocol.wrap")
+
+
 def render_crates(crates):
     lines = [f"  {name:<16} {version}" for name, version in sorted(crates.items())]
     return "declare -A _crates=(\n" + "\n".join(lines) + "\n)"
@@ -218,7 +247,7 @@ def plan_follow(texts, mesa_versions, llvm_versions, spirv):
     }
 
 
-def apply_follow(texts, plan, spirv, crates=None):
+def apply_follow(texts, plan, spirv, crates=None, venus=None):
     """The updated PKGBUILD texts (checksums still to be regenerated)."""
     updated = {}
     for directory, text in texts.items():
@@ -235,6 +264,8 @@ def apply_follow(texts, plan, spirv, crates=None):
                 text = set_value(text, "pkgrel", str(int(value(text, "pkgrel", directory)) + 1))
             if crates:
                 text = replace_array(text, "declare -A _crates", render_crates(crates))
+            if venus:
+                text = set_value(text, "_venusver", venus)
         elif directory in plan["rebuild"]:
             text = set_value(text, "pkgrel", str(int(value(text, "pkgrel", directory)) + 1))
         if spirv.get(directory):
@@ -297,7 +328,7 @@ def follow(root, cache, result_path):
 
     plan = plan_follow(texts, mesa_versions, llvm_versions, spirv)
     status = "none"
-    crates = None
+    crates = venus = None
     if plan["mesa"] or plan["llvm"]:
         os.makedirs(cache, exist_ok=True)
         mesa = plan["mesa"] or plan["from_mesa"]
@@ -308,11 +339,12 @@ def follow(root, cache, result_path):
             verify_signature(tarball, download(url + ".sig", cache), keys)
             log(f"{os.path.basename(tarball)}: good signature")
         crates = crates_from_tarball(os.path.join(cache, f"mesa-{mesa}.tar.xz"))
+        venus = venus_from_tarball(os.path.join(cache, f"mesa-{mesa}.tar.xz"))
         status = "bumped"
     elif plan["rebuild"]:
         status = "rebuilt"
 
-    updated = apply_follow(texts, plan, spirv, crates)
+    updated = apply_follow(texts, plan, spirv, crates, venus)
     for directory, text in updated.items():
         if text != texts[directory]:
             with open(os.path.join(root, directory, "PKGBUILD"), "w", encoding="utf-8") as out:
