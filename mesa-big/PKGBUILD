@@ -293,7 +293,8 @@ _remove_test_tools() {
   rm -fv "$pkgdir"/usr/bin/{aubinator,aubinator_error_decode,elk_asm,elk_disasm,gentool} \
     "$pkgdir"/usr/bin/{intel_dev_info,intel_dump_gpu,intel_error2aub,intel_error2hangdump} \
     "$pkgdir"/usr/bin/{intel_hang_replay,intel_measure.py,intel_monitor,intel_sanitize_gpu} \
-    "$pkgdir"/usr/bin/{intel_stub_gpu,mda}
+    "$pkgdir"/usr/bin/{intel_stub_gpu,mda} \
+    "$pkgdir"/usr/bin/amdgpu_list_devices  # drm-shim's simulated AMD GPUs (Mesa 26.3)
 
   # A tool a newer Mesa adds must not slip into the package unnoticed.
   local extra
