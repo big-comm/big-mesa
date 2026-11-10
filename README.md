@@ -156,7 +156,9 @@ Nobody updates it by hand. Two workflows keep it in step, as the
   release of the same major, it moves **both** PKGBUILDs together: downloads
   the tarballs and checks their signatures against the release managers' keys
   in [`mesa-big/keys/pgp`](mesa-big/keys/pgp), and nothing else; regenerates
-  the NVK crate list from the new Mesa and the checksums; sets `pkgrel` back
+  the NVK crate list and the venus-protocol version (`_venusver`, a git
+  source put where Mesa's `subprojects/venus-protocol.wrap` would clone it)
+  from the new Mesa, and the checksums; sets `pkgrel` back
   to 1 and commits. The CI does not import keys, so the PKGBUILDs pin the
   tarballs by checksum: this is where the signatures are checked.
 - **[Build what testing lacks](.github/workflows/build-mesa.yml)**, every half

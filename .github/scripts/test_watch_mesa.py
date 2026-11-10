@@ -86,13 +86,14 @@ class TestApply(unittest.TestCase):
     def test_bump_moves_both_together(self):
         plan = watch_mesa.plan_follow(texts(), ["99.0.0"], ["23.9.9"], spirv_now())
         crates = {"bitflags": "9.9.9", "syn": "3.0.0"}
-        updated = watch_mesa.apply_follow(texts(), plan, spirv_now(), crates)
+        updated = watch_mesa.apply_follow(texts(), plan, spirv_now(), crates, "1.2.0")
         for directory, text in updated.items():
             with self.subTest(directory=directory):
                 self.assertEqual(watch_mesa.value(text, "pkgver"), "99.0.0")
                 self.assertEqual(watch_mesa.value(text, "_llvmver"), "23.9.9")
                 self.assertEqual(watch_mesa.value(text, "pkgrel"), "1")
                 self.assertIn("declare -A _crates=(\n  bitflags         9.9.9\n  syn              3.0.0\n)", text)
+                self.assertEqual(watch_mesa.value(text, "_venusver"), "1.2.0")
                 self.assertEqual(self.bash_check(text), "ok")
 
     def test_a_new_llvm_alone_raises_pkgrel(self):
@@ -164,6 +165,58 @@ class TestCrates(unittest.TestCase):
                     info.size = len(data)
                     archive.addfile(info, io.BytesIO(data))
             self.assertEqual(watch_mesa.crates_from_tarball(path), {"syn": "2.0.87"})
+
+
+def tarball(tmp, files):
+    path = os.path.join(tmp, "mesa-99.0.0.tar.xz")
+    with tarfile.open(path, "w:xz") as archive:
+        for name, body in files.items():
+            data = body.encode()
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
+    return path
+
+
+VENUS_WRAP = (
+    "[wrap-git]\ndirectory = venus-protocol-1.1.3\n"
+    "url = https://gitlab.freedesktop.org/virgl/venus-protocol.git\nrevision = v1.1.3\ndepth = 1\n"
+    "\n[provide]\ndependency_names = dep_vn_protocol_driver\n"
+)
+
+
+class TestVenus(unittest.TestCase):
+    """Mesa 26.3 builds venus against venus-protocol, a subproject it clones."""
+
+    def test_from_the_wrap_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = tarball(tmp, {"mesa-99.0.0/subprojects/venus-protocol.wrap": VENUS_WRAP})
+            self.assertEqual(watch_mesa.venus_from_tarball(path), "1.1.3")
+
+    def test_a_wrap_the_pkgbuilds_do_not_expect_stops_the_bump(self):
+        for wrap in (
+            VENUS_WRAP.replace("revision = v1.1.3", "revision = main"),
+            VENUS_WRAP.replace("venus-protocol.git", "venus-protocol-fork.git"),
+            VENUS_WRAP.replace("directory = venus-protocol-1.1.3", "directory = venus-protocol"),
+        ):
+            with self.subTest(wrap=wrap), tempfile.TemporaryDirectory() as tmp:
+                path = tarball(tmp, {"mesa-99.0.0/subprojects/venus-protocol.wrap": wrap})
+                with self.assertRaises(watch_mesa.PkgbuildError):
+                    watch_mesa.venus_from_tarball(path)
+
+    def test_a_release_without_it_stops_the_bump(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = tarball(tmp, {"mesa-99.0.0/subprojects/expat.wrap": "source_url = x\n"})
+            with self.assertRaises(watch_mesa.PkgbuildError):
+                watch_mesa.venus_from_tarball(path)
+
+    def test_both_pkgbuilds_fetch_and_place_the_same_version(self):
+        for directory, text in texts().items():
+            with self.subTest(directory=directory):
+                self.assertEqual(watch_mesa.value(text, "_venusver"), current("_venusver"))
+                self.assertIn('"venus-protocol::git+https://gitlab.freedesktop.org/virgl/venus-protocol.git'
+                              '#tag=v$_venusver"', text)
+                self.assertIn("cp -a ../venus-protocol subprojects/venus-protocol-$_venusver", text)
 
 
 @unittest.skipUnless(shutil.which("gpg"), "gpg not installed")
