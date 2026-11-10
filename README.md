@@ -51,7 +51,7 @@ install it keep Manjaro's `mesa`.
 | **Vulkan** | RADV (AMD), ANV (Intel), hasvk (older Intel), NVK (NVIDIA), venus (virtual machines) |
 | **Video** | VA-API for AMD, all codecs Mesa supports |
 | **Virtual machines** | AMD and Intel native contexts (the host's native driver used inside the guest), plus virgl and venus |
-| **Vulkan layers** | device-select, overlay, anti-lag, screenshot, vram-report-limit |
+| **Vulkan layers** | device-select, overlay, screenshot, vram-report-limit (anti-lag is built into RADV since Mesa 26.3, as VK_AMD_anti_lag) |
 
 Left out: softpipe (llvmpipe replaces it whenever LLVM is present, and here it
 always is), lavapipe (Manjaro's `vulkan-swrast` keeps working alongside)
