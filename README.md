@@ -48,15 +48,14 @@ install it keep Manjaro's `mesa`.
 | Drivers | |
 |---|---|
 | **OpenGL** | radeonsi (AMD), iris (Intel Gen8+), crocus (older Intel), zink (OpenGL on Vulkan), virgl, llvmpipe (software) |
-| **Vulkan** | RADV (AMD), ANV (Intel), hasvk (older Intel), NVK (NVIDIA), venus (virtual machines) |
+| **Vulkan** | RADV (AMD), ANV (Intel), hasvk (older Intel), NVK (NVIDIA), venus (virtual machines), lavapipe (software) |
 | **Video** | VA-API for AMD, all codecs Mesa supports |
 | **Virtual machines** | AMD and Intel native contexts (the host's native driver used inside the guest), plus virgl and venus |
 | **Vulkan layers** | device-select, overlay, screenshot, vram-report-limit (anti-lag is built into RADV since Mesa 26.3, as VK_AMD_anti_lag) |
 
 Left out: softpipe (llvmpipe replaces it whenever LLVM is present, and here it
-always is), lavapipe (Manjaro's `vulkan-swrast` keeps working alongside)
-and OpenCL (see the [roadmap](#roadmap)). The 32-bit package has the same
-drivers, without Intel ray tracing (as Arch's `lib32-mesa`).
+always is) and OpenCL (see the [roadmap](#roadmap)). The 32-bit package has
+the same drivers, without Intel ray tracing (as Arch's `lib32-mesa`).
 
 ## How it differs from Manjaro's mesa
 
@@ -67,12 +66,12 @@ drivers, without Intel ray tracing (as Arch's `lib32-mesa`).
   not always agree. mesa-big carries LLVM inside: it does not depend on
   `llvm-libs` and keeps working whatever LLVM the system has. AMD shaders are
   compiled by ACO, Mesa's own compiler (radeonsi's default since Mesa 26.0), so
-  LLVM is only used by llvmpipe.
+  LLVM is only used by the software drivers, llvmpipe and lavapipe.
 - **One package per architecture.** `mesa`, `vulkan-intel`, `vulkan-radeon`,
   `vulkan-nouveau`, `vulkan-virtio`, `vulkan-mesa-layers`,
-  `vulkan-mesa-implicit-layers` and `libva-mesa-driver` are all in `mesa-big`,
-  which provides and replaces them; their `lib32-` twins are all in
-  `lib32-mesa-big`.
+  `vulkan-mesa-implicit-layers`, `vulkan-swrast` and `libva-mesa-driver` are
+  all in `mesa-big`, which provides and replaces them; their `lib32-` twins
+  are all in `lib32-mesa-big`.
 - **Same compiler and flags as Arch.** GCC, `-O2`, the system's
   `makepkg.conf`. Clang was measured and compiled shaders 3–4% slower; Mesa
   refuses LTO. Faster builds (`-O3`, `x86-64-v3`, PGO) will only be used once
@@ -108,13 +107,15 @@ vulkaninfo --summary | grep driverInfo     # Mesa 26.2.5-big1
 ## Going back to Manjaro's mesa
 
 From the Driver Manager, the **Stable** row. Or with pacman, naming the Vulkan
-drivers for your GPU:
+drivers for your GPU and `vulkan-swrast`, which mesa-big also provides:
 
 ```bash
-sudo pacman -S mesa vulkan-intel vulkan-mesa-implicit-layers \
-  lib32-mesa lib32-vulkan-intel lib32-vulkan-mesa-implicit-layers     # Intel
-sudo pacman -S mesa vulkan-radeon vulkan-mesa-implicit-layers \
-  lib32-mesa lib32-vulkan-radeon lib32-vulkan-mesa-implicit-layers    # AMD
+sudo pacman -S mesa vulkan-intel vulkan-mesa-implicit-layers vulkan-swrast \
+  lib32-mesa lib32-vulkan-intel lib32-vulkan-mesa-implicit-layers \
+  lib32-vulkan-swrast                                                 # Intel
+sudo pacman -S mesa vulkan-radeon vulkan-mesa-implicit-layers vulkan-swrast \
+  lib32-mesa lib32-vulkan-radeon lib32-vulkan-mesa-implicit-layers \
+  lib32-vulkan-swrast                                                 # AMD
 ```
 
 If the desktop does not start, do it from a text console (Ctrl+Alt+F3).
@@ -127,7 +128,8 @@ published:
 1. **No LLVM from the system.** No library in the package may link
    `libLLVM`.
 2. **The drivers load.** RADV and ANV run on simulated GPUs (Mesa's
-   `drm-shim`, no hardware needed) and must report this exact version.
+   `drm-shim`, no hardware needed), lavapipe on the CPU; each must report
+   this exact version.
 3. **They compile real shaders.** shader-db compiles its 8,539 shaders on each
    simulated GPU (13,504 programs on Intel, which compiles some shaders in more
    than one variant); a crash, or fewer than 8,000 shaders, fails the build.
@@ -140,8 +142,9 @@ published:
 
 `lib32-mesa-big` runs what a 32-bit game does first, with a small 32-bit
 program built in its `check()` ([`test-lib32.c`](lib32-mesa-big/test-lib32.c)):
-OpenGL through EGL on llvmpipe, which must report the static LLVM, and Vulkan
-on simulated AMD and Intel GPUs, which must report this exact version. It also
+OpenGL through EGL on llvmpipe and Vulkan on lavapipe, which must report the
+static LLVM, and Vulkan on simulated AMD and Intel GPUs, which must report this
+exact version. It also
 fails if any library links `libLLVM`, or if anything outside `/usr/lib32` ends
 up in the package.
 
