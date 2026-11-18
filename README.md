@@ -1,11 +1,11 @@
 <p align="center">
-  <img src=".github/assets/banner.png" alt="mesa-big — the BigCommunity Mesa" width="100%">
+  <img src=".github/assets/banner.png" alt="mesa-big — the BigLinux Mesa" width="100%">
 </p>
 
-# mesa-big — the BigCommunity Mesa
+# mesa-big — the BigLinux Mesa
 
 **mesa-big** is an optional build of [Mesa](https://www.mesa3d.org), the open
-source OpenGL and Vulkan drivers, for [BigCommunity](https://communitybig.org).
+source OpenGL and Vulkan drivers, for [BigLinux](https://www.biglinux.com.br).
 It is built from the official sources at mesa3d.org, always the latest stable
 release (the `.0` of a new series included), with its own copy of LLVM built
 in, and it is tested during the build on simulated AMD and Intel GPUs. It
@@ -82,7 +82,7 @@ example `Mesa 26.2.5-big1`.
 
 ## Installing
 
-From the **BigCommunity Driver Manager**: *Mesa* page, the **BigCommunity**
+From the **BigLinux Driver Manager**: *Mesa* page, the **BigLinux**
 row, *Switch*. It plans the switch first and refuses it if any installed
 package would lose a dependency.
 
@@ -151,7 +151,7 @@ up in the package.
 ## Updating to a new release
 
 Nobody updates it by hand. Two workflows keep it in step, as the
-[big-kernel](https://github.com/big-comm/big-kernel) watchers do:
+[big-kernel](https://github.com/biglinux/big-kernel) watchers do:
 
 - **[Follow Mesa and LLVM](.github/workflows/follow-mesa.yml)**, every six
   hours, in the image the packages are built in. When archive.mesa3d.org has a
@@ -166,7 +166,7 @@ Nobody updates it by hand. Two workflows keep it in step, as the
   tarballs by checksum: this is where the signatures are checked.
 - **[Build what testing lacks](.github/workflows/build-mesa.yml)**, every half
   hour: sends each package to be built for testing while its PKGBUILD is ahead
-  of community-testing. A build that does not get published is sent again
+  of biglinux-testing. A build that does not get published is sent again
   after half an hour, up to three attempts in all; the third failure fails the
   workflow, so GitHub mails it.
 
@@ -202,7 +202,7 @@ gpg --verify mesa-26.2.6.tar.xz.sig mesa-26.2.6.tar.xz
 ## Building it yourself
 
 ```bash
-git clone https://github.com/big-comm/big-mesa
+git clone https://github.com/biglinux/big-mesa
 cd big-mesa/mesa-big
 makepkg -s
 cd ../lib32-mesa-big     # needs the multilib repository
@@ -224,8 +224,8 @@ sudo pacman -U mesa-big/mesa-big-*.pkg.tar.zst lib32-mesa-big/lib32-mesa-big-*.p
 
 ### How the official packages are built
 
-Official packages are built by the BigCommunity CI
-([build-package](https://github.com/big-comm/build-package)), which builds
+Official packages are built by the BigLinux CI
+([build-package](https://github.com/biglinux/build-package)), which builds
 the directory it is asked for (`pkgbuild_dir: mesa-big` or
 `pkgbuild_dir: lib32-mesa-big`).
 
@@ -249,7 +249,7 @@ big-mesa/
 
 - [x] mesa-big 26.2.5 — upstream stable, static LLVM 23.1.4, tested on simulated GPUs
 - [x] **lib32-mesa-big** — the 32-bit libraries, for Steam and Wine, with their own static LLVM
-- [x] Selectable in the BigCommunity Driver Manager
+- [x] Selectable in the BigLinux Driver Manager
 - [ ] Validation on Intel (Arrow Lake) and AMD machines
 - [ ] **opencl-mesa-big** — Rusticl, with its own Clang built in
 - [ ] A `-debug` package, for useful backtraces when a driver crashes

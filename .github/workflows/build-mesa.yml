@@ -1,7 +1,7 @@
 name: 🔎 Build what testing lacks
 
 # Sends mesa-big and lib32-mesa-big to be built for testing whenever their
-# PKGBUILD is ahead of what community-testing has: a new release committed by
+# PKGBUILD is ahead of what biglinux-testing has: a new release committed by
 # the Mesa watcher, or a change made by hand. A build that does not get
 # published is sent again after half an hour, up to three attempts in all.
 # See .github/scripts/watch_mesa.py.
@@ -53,8 +53,9 @@ jobs:
 
       - name: Dispatch the packages that are behind
         env:
-          # A token allowed to dispatch to big-comm/build-package.
-          DISPATCH_TOKEN: ${{ secrets.DISPATCH_TOKEN || secrets.ORGANIZATION_TOKEN }}
+          # A token allowed to dispatch to biglinux/build-package: the organization's
+          # WEBHOOK_TOKEN, the one every BigLinux package repository uses.
+          DISPATCH_TOKEN: ${{ secrets.WEBHOOK_TOKEN || secrets.DISPATCH_TOKEN }}
           DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
           FORCE: ${{ inputs.force && '--force' || '' }}
         run: python3 .github/scripts/watch_mesa.py dispatch --state watch-state.json $DRY_RUN $FORCE
