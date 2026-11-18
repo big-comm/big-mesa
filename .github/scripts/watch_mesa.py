@@ -13,7 +13,7 @@ follow    Runs in the build image. Moves both PKGBUILDs, together, to the
           A new LLVM major is left to a person: Mesa may not support it yet.
 
 dispatch  Sends each package to be built for testing while its PKGBUILD is
-          ahead of what community-testing has, up to three attempts per
+          ahead of what biglinux-testing has, up to three attempts per
           version, as the big-kernel module watcher does.
 
 A version that does not build, or fails check(), is never published: the
@@ -34,9 +34,9 @@ import time
 import urllib.error
 import urllib.request
 
-REPOSITORY_URL = "https://github.com/big-comm/big-mesa"
+REPOSITORY_URL = "https://github.com/biglinux/big-mesa"
 USER_AGENT = f"big-mesa-watch/1 (+{REPOSITORY_URL})"
-WORKFLOW_REPOSITORY = "big-comm/build-package"
+WORKFLOW_REPOSITORY = "biglinux/build-package"
 
 # Package directory -> the Manjaro package whose library it links unversioned.
 PACKAGES = {
@@ -57,9 +57,9 @@ MANJARO_DBS = {
     "spirv-tools": "https://mirrors.manjaro.org/repo/stable/extra/x86_64/extra.db",
     "lib32-spirv-tools": "https://mirrors.manjaro.org/repo/stable/multilib/x86_64/multilib.db",
 }
-COMMUNITY_DB = "https://repo.communitybig.org/community-{branch}/x86_64/community-{branch}.db"
+BIGLINUX_DB = "https://packages.biglinux.com.br/biglinux-{branch}/x86_64/biglinux-{branch}.db"
 # What a testing user sees: stable, with testing's copy taking precedence.
-TESTING_VIEW = [COMMUNITY_DB.format(branch="stable"), COMMUNITY_DB.format(branch="testing")]
+TESTING_VIEW = [BIGLINUX_DB.format(branch="stable"), BIGLINUX_DB.format(branch="testing")]
 
 
 class PkgbuildError(Exception):
@@ -71,7 +71,7 @@ def log(message):
 
 
 def fetch(url):
-    # repo.communitybig.org refuses urllib's default User-Agent.
+    # Package servers may refuse urllib's default User-Agent.
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=300) as response:
         return response.read()
