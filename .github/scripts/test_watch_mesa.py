@@ -35,6 +35,36 @@ def spirv_now():
 
 
 class TestUpstream(unittest.TestCase):
+    def test_the_github_api_is_asked_with_the_jobs_token(self):
+        sent = {}
+
+        class Response(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        def urlopen(request, timeout):
+            sent[request.full_url] = request.get_header("Authorization")
+            return Response(b"[]")
+
+        real = watch_mesa.urllib.request.urlopen
+        watch_mesa.urllib.request.urlopen = urlopen
+        try:
+            os.environ["GITHUB_TOKEN"] = "job-token"
+            watch_mesa.fetch(watch_mesa.LLVM_RELEASES)
+            watch_mesa.fetch("https://mesa.freedesktop.org/archive/")
+            del os.environ["GITHUB_TOKEN"]
+            watch_mesa.fetch("https://api.github.com/repos/x/y")
+        finally:
+            watch_mesa.urllib.request.urlopen = real
+            os.environ.pop("GITHUB_TOKEN", None)
+        self.assertEqual(sent[watch_mesa.LLVM_RELEASES], "Bearer job-token")
+        # The token goes to GitHub only, never to a download server.
+        self.assertIsNone(sent["https://mesa.freedesktop.org/archive/"])
+        self.assertIsNone(sent["https://api.github.com/repos/x/y"])
+
     def test_mesa_release_candidates_are_ignored(self):
         listing = "".join(
             f'<a href="mesa-{v}.tar.xz">' for v in ("26.2.10", "26.2.9", "26.3.0-rc2", "26.2.9.sig")

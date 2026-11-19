@@ -72,7 +72,15 @@ def log(message):
 
 def fetch(url):
     # Package servers may refuse urllib's default User-Agent.
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    headers = {"User-Agent": USER_AGENT}
+    # Without a token the GitHub API allows 60 requests an hour per address,
+    # shared by every job on the runner's address: 2026-11-19 the LLVM
+    # release list came back "403 rate limit exceeded". With the job's own
+    # token the limit is the repository's.
+    token = os.environ.get("GITHUB_TOKEN")
+    if token and url.startswith("https://api.github.com/"):
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=300) as response:
         return response.read()
 

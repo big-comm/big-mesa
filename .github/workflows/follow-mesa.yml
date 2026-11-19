@@ -56,6 +56,8 @@ jobs:
 
       - name: Update to the newest releases
         id: follow
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           python3 .github/scripts/watch_mesa.py follow --cache mesa-cache --result "$RUNNER_TEMP/follow.json"
           # Keep only the tarballs the PKGBUILDs now name. Nothing is
